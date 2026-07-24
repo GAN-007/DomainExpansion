@@ -45,7 +45,7 @@ jobs:
 
           root = pathlib.Path.cwd().resolve()
           tracked = [pathlib.Path(p) for p in subprocess.check_output(['git', 'ls-files'], text=True).splitlines()]
-          expected_file_count = 85
+          expected_file_count = 84  # 83 upstream files plus this temporary validator.
 
           errors: list[str] = []
           if len(tracked) != expected_file_count:
@@ -79,6 +79,8 @@ jobs:
           markdown_files = [path for path in tracked if path.suffix.lower() == '.md']
           markdown_link = re.compile(r'!?\[[^\]]*\]\(([^)]+)\)')
           html_ref = re.compile(r'(?:src|href)=["\']([^"\']+)["\']', re.IGNORECASE)
+          fenced_code = re.compile(r'(^|\n)[ \t]*(```|~~~).*?\n[ \t]*\2[ \t]*(?=\n|$)', re.DOTALL)
+          inline_code = re.compile(r'`[^`\n]*`')
 
           def normalize_target(raw: str) -> str | None:
               raw = raw.strip()
@@ -101,8 +103,15 @@ jobs:
               except UnicodeDecodeError as exc:
                   errors.append(f'Invalid UTF-8 Markdown file {markdown}: {exc}')
                   continue
-              refs = [match.group(1) for match in markdown_link.finditer(text)]
-              refs.extend(match.group(1) for match in html_ref.finditer(text))
+
+              # Tutorial chapters intentionally contain complete example websites and
+              # sample absolute routes. Validate navigation/content references only,
+              # not href/src values contained inside fenced or inline code examples.
+              scan_text = fenced_code.sub('\n', text)
+              scan_text = inline_code.sub('', scan_text)
+
+              refs = [match.group(1) for match in markdown_link.finditer(scan_text)]
+              refs.extend(match.group(1) for match in html_ref.finditer(scan_text))
               for raw in refs:
                   target = normalize_target(raw)
                   if target is None:
@@ -184,5 +193,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit \
             -m "Validate imported FreeDomain snapshot" \
-            -m "Validated 84 upstream files, Markdown-local references, required paths, and PNG/JPEG signatures. The final tree removes this one-use validator."
+            -m "Validated 83 upstream files, Markdown navigation references, required paths, and PNG/JPEG signatures. The final tree removes this one-use validator."
           git push origin HEAD:agent/import-freedomain
