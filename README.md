@@ -1,100 +1,172 @@
-## 🌐 Welcome to DigitalPlat Domain
+# DigitalPlat Domain OSS
 
-<div align="center">
-  <img src="assets/logo.jpg" alt="logo" width="240">
-</div>
+[![AGPL-3.0 license badge](https://licenses.opensource.ngo/badges/AGPL-3.0-modern.svg)](https://licenses.opensource.ngo/docs/public-licenses/AGPL-3.0)
 
-Welcome to **DigitalPlat FreeDomain**, where we believe everyone deserves a digital identity. Whether you're an individual, or an organization, we’re offering free domain names to bring your ideas to life – no strings attached!
+DigitalPlat Domain OSS is a self-hosted domain and DNS management platform. It provides a unified user and administrator experience for publishing domains, managing DNS records, connecting authoritative DNS providers, and operating a domain service on infrastructure you control.
 
-With FreeDomain, you can register a unique domain and manage its records through a DNS provider that supports custom nameservers.
+## Features
 
-### ✔️ Why Free Domains?
+- One-command local installation with a browser-based setup wizard
+- SQLite by default, with MySQL support through `DATABASE_URL`
+- User registration, login, account suspension, and per-user domain limits
+- Integrated administrator pages for users, domains, settings, DNS providers, zones, jobs, webhooks, and audit events
+- Role-based teams, user sessions, email verification, password recovery, and TOTP two-factor authentication
+- Scoped and expiring API keys, a versioned REST API, OpenAPI discovery, and Prometheus metrics
+- DNS record support for A, AAAA, CNAME, MX, TXT, SRV, CAA, and NS
+- BIND updates through authenticated RFC 2136 and TSIG
+- PowerDNS Authoritative Server API support
+- Cloudflare API token support
+- Cloudflare DNSSEC lifecycle management and secondary DNS health checks
+- ACME DNS-01 challenge automation with automatic cleanup
+- JSON record import/export, CSV administration exports, and a Terraform provider
+- English, Spanish, Simplified Chinese, Traditional Chinese, Portuguese, French, Russian, and Japanese interfaces
+- Encrypted DNS credentials, CSRF protection, rate limits, secure password hashing, strict browser headers, and conservative network defaults
+- Durable DNS change jobs with retries, signed webhooks, optional SMTP delivery, and provider health reporting
+- Docker and Docker Compose deployment with a dedicated background worker
 
-At **DigitalPlat FreeDomain**, we’re on a mission to make the web more accessible. We believe that the cost of a domain shouldn’t hold anyone back from creating a website. Our goal is to make the internet an open space where everyone can have their own place online, regardless of budget.
+## Quick start
 
-> DigitalPlat FreeDomain is independently designed and maintained by [**Edward Hsing**](https://github.com/EdwardLab), founder of the DigitalPlat Foundation.
+Requires Python 3.11 or newer.
 
----
+```bash
+git clone https://github.com/DigitalPlatDev/Domain-OSS.git
+cd Domain-OSS
+./panel install
+./panel start
+```
 
-### 🌍 Available Domain Extensions
+Open <http://127.0.0.1:8080/setup/> and create the first administrator. Then open **Admin → DNS providers**, connect a provider, test it, and add a managed zone.
 
-- **.DPDNS.ORG**
-- **.US.KG**
-- **.QZZ.IO**
-- **.XX.KG**
-- **.QD.JE**
+The server binds to `127.0.0.1` by default. For direct LAN testing only:
 
-_(More extensions coming soon!)_
+```bash
+HOST=0.0.0.0 PORT=8080 ./panel start
+```
 
----
+For internet access, keep the local bind and place Caddy, nginx, or another HTTPS reverse proxy in front of the panel.
 
-### 🌍 Ready to Claim Your Free Domain?
+## Docker quick start
 
-Jump in and register your domain by visiting our site:
+```bash
+cp .env.example .env
+```
 
-➡️ [DigitalPlat FreeDomain Dashboard](https://dash.domain.digitalplat.org/)
+Replace `SECRET_KEY` in `.env` with the output of `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`, then run:
 
-📝 [Read our tutorial](./documents/tutorial/index.md)
+```bash
+docker compose up -d --build
+```
 
----
+The container is published only on `127.0.0.1:8080`. Complete setup through your reverse proxy or an SSH tunnel.
 
-### 📚 Learning Guide
+To use MySQL:
 
-Follow the complete book-style learning path in [LEARN.md](./LEARN.md), from DigitalPlat FreeDomain setup to general DNS, website, email, operations, and advanced topics.
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d --build
+```
 
----
+Set `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD` in `.env` first.
 
-### 🌟 Trusted by Thousands
+## DNS provider setup
 
-With over 500,000 domains already registered, DigitalPlat FreeDomain is a trusted choice for individuals and organizations alike. Join our growing community and claim your own free domain today!
+### Cloudflare
 
----
+Create an API token with `Zone:DNS:Edit` and `Zone:Zone:Read` for only the zone DigitalPlat Domain OSS will manage. Add the provider, then create a managed zone using the Cloudflare zone ID as **Remote zone ID**.
 
-### ❔ FAQ
+### PowerDNS
 
-Check [FAQ Page](./documents/domains/faq.md)
+Enable the Authoritative Server HTTP API, restrict it to the DigitalPlat Domain OSS host, and use a dedicated API key. Enter the API root URL, such as `https://dns.example.org`, and the key. The remote zone ID is optional; DigitalPlat Domain OSS uses the fully qualified zone name by default.
 
----
+### BIND
 
-### 🤝 Join Our Community!
+Configure a narrowly scoped TSIG key and permit RFC 2136 updates for the managed zone. Enter the update server, TCP port, key name, base64 secret, and algorithm. Restrict TCP port 53 so only the DigitalPlat Domain OSS host can reach the update service.
 
-🆕 Join our official [DigitalPlat FreeDomain Discord server](https://discord.gg/ma4RZzMmVW) today!
- Be the first to know about the latest updates, get support, and connect with the community.
- Got questions? Facing challenges? Or just want to share what you're building?
- Come hang out with us 🚀
+Example BIND policy:
 
-⚠️ **Security Notice**
-Our previous Telegram account and group were compromised and are no longer under our control.
-Please **do not trust any messages, links, or announcements** from Telegram, especially anything related to bonuses, earnings, or external sites.
-We are no longer using Telegram as an official communication channel.
+```text
+key "domain-oss-key" {
+    algorithm hmac-sha256;
+    secret "REPLACE_WITH_TSIG_SECRET";
+};
 
----
+zone "example.org" {
+    type primary;
+    file "db.example.org";
+    update-policy {
+        grant domain-oss-key zonesub ANY;
+    };
+};
+```
 
-### ⏭️ What's next
-We might introduce more domain options and free hosting in the future to help as many people as possible! 
+Use a more restrictive `update-policy` when your BIND deployment supports a narrower rule for the delegated namespace.
 
-**We can’t wait to see what you build!**
+## Configuration
 
----
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Local SQLite file | SQLAlchemy database URL; MySQL uses `mysql+pymysql://...` |
+| `SECRET_KEY` | Persistent local file | Session signing and DNS credential encryption key |
+| `SOURCE_URL` | Official GitHub repository | Public source and license link for network users |
+| `COOKIE_SECURE` | `0` | Set to `1` when served exclusively over HTTPS |
+| `HOST` | `127.0.0.1` | Bind address used by `./panel start` |
+| `PORT` | `8080` | Web server port |
+| `WORKERS` | `2` | Gunicorn worker count |
 
-### 🚨 Abuse Reporting
-We take domain name abuse seriously and are committed to maintaining a safer and more open internet. Every report is carefully reviewed, and response times may vary from a few hours to several days, depending on the complexity of the case.
+Do not change `SECRET_KEY` after storing provider credentials unless you first remove and recreate those providers. Back up the database and secret together.
 
-Email: abusereport@digitalplat.org
+## CLI
 
----
+```text
+./panel install       Create a virtual environment and initialize the database
+./panel start         Start the production Gunicorn server
+./panel doctor        Verify the database and basic runtime configuration
+./panel create-admin  Create a recovery administrator from the terminal
+./panel init-db       Create missing database tables
+./panel upgrade       Apply versioned database migrations
+./panel worker        Process DNS synchronization and ACME cleanup jobs
+```
 
-## 🧠 Story
+## Database backup
 
-This started as a small DNS experiment when I was 15, letting a few friends use subdomains.
+For the default installation, stop the panel briefly and back up both `instance/domain-oss.db` and `instance/secret_key`. With Docker, back up the `domain_oss_data` volume. Use your normal consistent snapshot or dump process for MySQL.
 
-Over time, it grew into something people actually rely on, and running it turned out to be much harder than building it.
+## Development
 
-I wrote a bit about how it evolved here:  
-https://dev.to/edwardhsing/i-bought-a-domain-at-15-now-it-powers-400000-users-7ol
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/pytest
+.venv/bin/ruff check .
+```
 
----
+The application factory is `domain_oss:create_app`. Templates and assets are server-rendered so the project stays easy to audit and deploy.
 
-## Source Code
+## REST API and automation
 
-DigitalPlat Domain OSS is open source at [DigitalPlatDev/Domain-OSS](https://github.com/DigitalPlatDev/Domain-OSS). Visit the repository to access the latest source code.
+Create a scoped API key from **Account & security**. The OpenAPI document is available at `/api/v1/openapi.json`; API requests use `Authorization: Bearer dpo_...`. Keep keys in a secret manager and grant only the scopes required by the integration.
+
+The Terraform provider source and example are in [`integrations/terraform-provider-domainoss`](integrations/terraform-provider-domainoss). ACME clients can publish and clean up DNS-01 challenges through the scoped challenge endpoints without receiving general account credentials.
+
+Prometheus metrics are available at `/api/v1/metrics` to administrator API keys with the `admin:metrics` scope.
+
+## Email and webhooks
+
+Set `PUBLIC_ORIGIN` and the `SMTP_*` variables to enable password recovery and verification mail. When SMTP is not configured, the panel continues to operate and records a delivery warning.
+
+Webhooks use an HMAC SHA-256 signature in `X-Domain-OSS-Signature`. HTTPS endpoints must resolve only to public addresses unless `ALLOW_PRIVATE_WEBHOOKS=1` is explicitly configured. Redirects are not followed.
+
+See the [documentation index](docs/README.md) for installation, configuration, user, administrator, provider, automation, backup, testing, and production guidance.
+
+## Security model and scope
+
+Administrators choose which parent zones are available to users. A user can claim a single label below those zones and edit records only beneath the resulting domain. DNS credentials are protected administrator secrets and are never exposed to users.
+
+DigitalPlat Domain OSS is not a registrar, registry, billing platform, abuse-handling service, or authoritative DNS server. DNSSEC controls are currently available through Cloudflare; BIND and PowerDNS installations continue to manage signing on their authoritative infrastructure. Operators remain responsible for HTTPS, backups, provider access policy, monitoring, abuse response, and applicable registration policies.
+
+Read [SECURITY.md](SECURITY.md) before exposing an installation to the internet.
+
+## License
+
+Copyright (C) 2026 DigitalPlat Domain OSS contributors.
+
+DigitalPlat Domain OSS is licensed under the GNU Affero General Public License, version 3 only. See [LICENSE](LICENSE). If you run a modified version as a network service, the license requires that users be offered the corresponding source code.
