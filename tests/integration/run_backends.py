@@ -7,6 +7,7 @@ import smtplib
 import time
 from email.message import EmailMessage
 
+import dns.exception
 import dns.resolver
 import pymysql
 import requests
@@ -22,7 +23,15 @@ def wait_for(label, check, timeout=90):
     while time.monotonic() < deadline:
         try:
             return check()
-        except Exception as exc:  # Services need a short startup window.
+        except (
+            AssertionError,
+            OSError,
+            RuntimeError,
+            dns.exception.DNSException,
+            pymysql.MySQLError,
+            requests.RequestException,
+            smtplib.SMTPException,
+        ) as exc:  # Services need a short startup window.
             last_error = exc
             time.sleep(2)
     raise RuntimeError(f"{label} did not become ready: {last_error}")
