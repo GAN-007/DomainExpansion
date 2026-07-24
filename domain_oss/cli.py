@@ -2,6 +2,7 @@ import socket
 
 import click
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from . import create_app
 from .extensions import db
@@ -60,7 +61,7 @@ def doctor():
         try:
             db.session.execute(text("SELECT 1"))
             click.secho("[ok] Database connection", fg="green")
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             failures += 1
             click.secho(f"[failed] Database connection: {exc}", fg="red")
         if not inspect(db.engine).has_table("user"):
