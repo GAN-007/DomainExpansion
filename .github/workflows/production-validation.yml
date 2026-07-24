@@ -18,10 +18,13 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          find . -path ./.git -prune -o -type f -print | sort > source-inventory.txt
-          python - <<'PY'
+          audit_dir="${RUNNER_TEMP}/source-audit"
+          mkdir -p "${audit_dir}"
+          find . -path ./.git -prune -o -type f -print | sort > "${audit_dir}/source-inventory.txt"
+          AUDIT_DIR="${audit_dir}" python - <<'PY'
           import hashlib
           import json
+          import os
           from pathlib import Path
 
           files = []
@@ -34,16 +37,18 @@ jobs:
                   'bytes': len(data),
                   'sha256': hashlib.sha256(data).hexdigest(),
               })
-          Path('source-manifest.json').write_text(json.dumps(files, indent=2) + '\n', encoding='utf-8')
+          output = Path(os.environ['AUDIT_DIR']) / 'source-manifest.json'
+          output.write_text(json.dumps(files, indent=2) + '\n', encoding='utf-8')
           PY
-          tar --exclude=.git -czf domainexpansion-source.tar.gz .
+          tar --exclude=.git -czf "${audit_dir}/domainexpansion-source.tar.gz" .
+          printf 'AUDIT_DIR=%s\n' "${audit_dir}" >> "${GITHUB_ENV}"
       - uses: actions/upload-artifact@v4
         with:
           name: complete-source-${{ github.run_id }}
           path: |
-            source-inventory.txt
-            source-manifest.json
-            domainexpansion-source.tar.gz
+            ${{ env.AUDIT_DIR }}/source-inventory.txt
+            ${{ env.AUDIT_DIR }}/source-manifest.json
+            ${{ env.AUDIT_DIR }}/domainexpansion-source.tar.gz
           retention-days: 7
 
   python-validation:
