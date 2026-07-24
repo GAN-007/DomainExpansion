@@ -1,0 +1,162 @@
+name: Validate Imported FreeDomain Snapshot
+
+on:
+  push:
+    branches:
+      - agent/import-freedomain
+    paths:
+      - .github/workflows/validate-import.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-freedomain-import
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate all imported files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out imported branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/import-freedomain
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Validate inventory, local references, and binary signatures
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import collections
+          import pathlib
+          import re
+          import sys
+          import urllib.parse
+
+          root = pathlib.Path.cwd()
+          expected_file_count = 85  # 84 upstream files plus this temporary validator.
+          tracked = [pathlib.Path(p) for p in __import__('subprocess').check_output(['git', 'ls-files'], text=True).splitlines()]
+
+          if len(tracked) != expected_file_count:
+              raise SystemExit(f'Unexpected tracked-file count: expected {expected_file_count}, found {len(tracked)}')
+
+          required = [
+              pathlib.Path('README.md'),
+              pathlib.Path('LEARN.md'),
+              pathlib.Path('LICENSE'),
+              pathlib.Path('.github/FUNDING.yml'),
+              pathlib.Path('assets/logo.jpg'),
+              pathlib.Path('documents/domains/announcement.md'),
+              pathlib.Path('documents/domains/faq.md'),
+              pathlib.Path('documents/tutorial/index.md'),
+              pathlib.Path('documents/tutorial/BOOK_PLAN.md'),
+          ]
+          missing_required = [str(p) for p in required if not (root / p).is_file()]
+          if missing_required:
+              raise SystemExit('Missing required files: ' + ', '.join(missing_required))
+
+          forbidden_transfer_artifacts = [
+              pathlib.Path('.transfer-bootstrap'),
+              pathlib.Path('.source-archive-link.md'),
+              pathlib.Path('.github/workflows/import-upstream.yml'),
+          ]
+          present_forbidden = [str(p) for p in forbidden_transfer_artifacts if (root / p).exists()]
+          if present_forbidden:
+              raise SystemExit('Transfer artifacts still present: ' + ', '.join(present_forbidden))
+
+          extensions = collections.Counter((p.suffix.lower() or '<none>') for p in tracked)
+          markdown_files = [p for p in tracked if p.suffix.lower() == '.md']
+
+          markdown_link = re.compile(r'!?\[[^\]]*\]\(([^)]+)\)')
+          html_ref = re.compile(r'(?:src|href)=["\']([^"\']+)["\']', re.IGNORECASE)
+          broken: list[tuple[str, str, str]] = []
+
+          def normalize_target(raw: str) -> str | None:
+              raw = raw.strip()
+              if not raw:
+                  return None
+              if raw.startswith('<') and raw.endswith('>'):
+                  raw = raw[1:-1].strip()
+              # Markdown targets can include an optional quoted title after whitespace.
+              if ' "' in raw:
+                  raw = raw.split(' "', 1)[0]
+              elif " '" in raw:
+                  raw = raw.split(" '", 1)[0]
+              parsed = urllib.parse.urlsplit(raw)
+              if parsed.scheme or raw.startswith('//') or raw.startswith('#'):
+                  return None
+              path = urllib.parse.unquote(parsed.path)
+              return path or None
+
+          for md in markdown_files:
+              text = (root / md).read_text(encoding='utf-8')
+              refs = [m.group(1) for m in markdown_link.finditer(text)]
+              refs.extend(m.group(1) for m in html_ref.finditer(text))
+              for raw in refs:
+                  target = normalize_target(raw)
+                  if target is None:
+                      continue
+                  candidate = (root / md.parent / target).resolve()
+                  try:
+                      candidate.relative_to(root.resolve())
+                  except ValueError:
+                      broken.append((str(md), raw, 'escapes repository root'))
+                      continue
+                  if not candidate.exists():
+                      broken.append((str(md), raw, 'target does not exist'))
+
+          if broken:
+              for source, target, reason in broken:
+                  print(f'BROKEN {source}: {target!r} ({reason})', file=sys.stderr)
+              raise SystemExit(f'Found {len(broken)} broken internal references')
+
+          signatures = {
+              '.png': b'\x89PNG\r\n\x1a\n',
+              '.jpg': b'\xff\xd8\xff',
+              '.jpeg': b'\xff\xd8\xff',
+          }
+          binary_files = [p for p in tracked if p.suffix.lower() in signatures]
+          for path in binary_files:
+              data = (root / path).read_bytes()
+              if not data.startswith(signatures[path.suffix.lower()]):
+                  raise SystemExit(f'Invalid {path.suffix} signature: {path}')
+              if len(data) == 0:
+                  raise SystemExit(f'Empty binary asset: {path}')
+
+          app_manifests = [
+              'package.json', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json',
+              'pyproject.toml', 'requirements.txt', 'Pipfile', 'poetry.lock',
+              'go.mod', 'Cargo.toml', 'composer.json', 'Gemfile',
+              'Dockerfile', 'docker-compose.yml', 'compose.yaml',
+          ]
+          present_manifests = [name for name in app_manifests if (root / name).exists()]
+
+          print(f'Tracked files including validator: {len(tracked)}')
+          print(f'Upstream snapshot files: {len(tracked) - 1}')
+          print(f'Markdown files: {len(markdown_files)}')
+          print(f'Binary image assets: {len(binary_files)}')
+          print('Extension distribution: ' + ', '.join(f'{k}={v}' for k, v in sorted(extensions.items())))
+          print('Broken internal references: 0')
+          print('Application manifests detected: ' + (', '.join(present_manifests) if present_manifests else 'none'))
+          print('Conclusion: repository is documentation/assets, not an executable application.')
+          PY
+
+      - name: Remove validator and preserve exact upstream tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git rm .github/workflows/validate-import.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit \
+            -m "Validate imported FreeDomain snapshot" \
+            -m "Validated 84 upstream files, Markdown-local references, required paths, and PNG/JPEG signatures. The final tree removes this one-use validator."
+          git push origin HEAD:agent/import-freedomain
