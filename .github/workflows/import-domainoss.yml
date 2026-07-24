@@ -1,0 +1,115 @@
+name: Import Domain OSS Source
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-domainoss-source
+  cancel-in-progress: false
+
+jobs:
+  import:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'agent/domainoss-full-production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SOURCE_REPOSITORY: DigitalPlatDev/Domain-OSS
+      SOURCE_COMMIT: 7eac16f470a1890b6cdc70abe272771879665bb6
+      TARGET_BRANCH: agent/domainoss-full-production
+
+    steps:
+      - name: Check out destination branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Preserve existing destination documentation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          preserve_root="${RUNNER_TEMP}/destination-preserve"
+          mkdir -p "${preserve_root}"
+          if [ -f README.md ]; then
+            cp README.md "${preserve_root}/FreeDomain-README.md"
+          fi
+          printf 'PRESERVE_ROOT=%s\n' "${preserve_root}" >> "${GITHUB_ENV}"
+
+      - name: Download immutable source snapshot
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          archive="${RUNNER_TEMP}/domainoss-${SOURCE_COMMIT}.tar.gz"
+          url="https://github.com/${SOURCE_REPOSITORY}/archive/${SOURCE_COMMIT}.tar.gz"
+          curl --fail --location --retry 5 --retry-delay 2 --connect-timeout 20 \
+            --output "${archive}" "${url}"
+          test -s "${archive}"
+          tar -tzf "${archive}" >/dev/null
+          extract_root="${RUNNER_TEMP}/domainoss-extracted"
+          mkdir -p "${extract_root}"
+          tar -xzf "${archive}" -C "${extract_root}"
+          source_dir="$(find "${extract_root}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          test -n "${source_dir}"
+          test -f "${source_dir}/LICENSE"
+          test -f "${source_dir}/README.md"
+          test -f "${source_dir}/pyproject.toml"
+          test -d "${source_dir}/domain_oss"
+          test -d "${source_dir}/tests"
+          printf 'SOURCE_DIR=%s\n' "${source_dir}" >> "${GITHUB_ENV}"
+
+      - name: Replace destination with complete executable source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+          cp -a "${SOURCE_DIR}/." .
+
+          mkdir -p docs/imported-freedomain
+          if [ -f "${PRESERVE_ROOT}/FreeDomain-README.md" ]; then
+            cp "${PRESERVE_ROOT}/FreeDomain-README.md" docs/imported-freedomain/README.md
+          fi
+
+          cat > SOURCE_IMPORT.md <<'EOF'
+          # Source Import Record
+
+          This repository contains the complete executable source imported from
+          `DigitalPlatDev/Domain-OSS` at immutable commit
+          `7eac16f470a1890b6cdc70abe272771879665bb6`.
+
+          The imported application remains licensed under GNU AGPL-3.0-only.
+          Original attribution, copyright notices, source links, documentation,
+          tests, integrations, and operational tooling are preserved.
+
+          The earlier `DigitalPlatDev/FreeDomain` documentation-only repository
+          material that existed on the destination default branch before this
+          import is preserved under `docs/imported-freedomain/`.
+          EOF
+
+          git add --all
+          test -f LICENSE
+          test -f pyproject.toml
+          test -f Dockerfile
+          test -f docker-compose.yml
+          test -f domain_oss/__init__.py
+          test -d tests
+          test -d integrations/terraform-provider-domainoss
+          test ! -e .github/workflows/import-domainoss.yml
+
+      - name: Commit imported executable platform
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit \
+            -m "Import complete DigitalPlat Domain OSS application" \
+            -m "Source: DigitalPlatDev/Domain-OSS@${SOURCE_COMMIT}" \
+            -m "Preserves AGPL-3.0 licensing, attribution, tests, integrations, and existing destination documentation."
+          git push origin "HEAD:${TARGET_BRANCH}"
