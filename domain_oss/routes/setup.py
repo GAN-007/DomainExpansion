@@ -5,7 +5,6 @@ from ..i18n import get_locale
 from ..models import Setting, User
 from ..security import USERNAME_RE, require_password_strength
 
-
 bp = Blueprint("setup", __name__, url_prefix="/setup")
 
 

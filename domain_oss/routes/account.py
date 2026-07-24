@@ -16,7 +16,6 @@ from ..models import APIKey, Notification, Team, TeamMember, User, UserSession, 
 from ..security import audit, decrypt_config, encrypt_config, rate_limited, require_password_strength
 from ..tokens import issue_token, read_token
 
-
 bp = Blueprint("account", __name__, url_prefix="/account")
 LOCALES = ("en-US", "zh-CN", "zh-TW", "es-ES", "pt-BR", "fr-FR", "ru-RU", "ja-JP")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")

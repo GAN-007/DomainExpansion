@@ -97,10 +97,9 @@ def test_mysql():
         )
 
     connection = wait_for("MySQL", connect)
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            assert cursor.fetchone() == (1,)
+    with connection, connection.cursor() as cursor:
+        cursor.execute("SELECT 1")
+        assert cursor.fetchone() == (1,)
 
 
 def test_smtp():

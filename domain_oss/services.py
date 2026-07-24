@@ -30,9 +30,8 @@ def validate_record(name, record_type, content, ttl, priority=None):
             ipaddress.IPv4Address(content)
         elif record_type == "AAAA":
             ipaddress.IPv6Address(content)
-        elif record_type in {"CNAME", "NS", "MX"}:
-            if "." not in content.rstrip("."):
-                raise ValueError
+        elif record_type in {"CNAME", "NS", "MX"} and "." not in content.rstrip("."):
+            raise ValueError
         if record_type == "SRV":
             parts = content.split()
             if len(parts) != 3 or not all(part.isdigit() for part in parts[:2]):

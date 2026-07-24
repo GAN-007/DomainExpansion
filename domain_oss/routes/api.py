@@ -16,7 +16,6 @@ from ..providers import DNSProviderError
 from ..security import LABEL_RE, rate_limited
 from ..services import sync_rrset, validate_record
 
-
 bp = Blueprint("api", __name__, url_prefix="/api/v1")
 
 

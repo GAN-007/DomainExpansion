@@ -3,7 +3,6 @@ from sqlalchemy import inspect, text
 from .extensions import db
 from .models import SchemaVersion
 
-
 LATEST_SCHEMA_VERSION = 3
 
 

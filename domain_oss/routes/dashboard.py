@@ -4,7 +4,6 @@ from flask_login import current_user, login_required
 from ..models import AuditLog, Domain, ManagedZone
 from ..permissions import visible_domains_query
 
-
 bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
 

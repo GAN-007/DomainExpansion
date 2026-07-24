@@ -1,8 +1,8 @@
 import pytest
 
+from domain_oss.dns_tools import parse_nameserver
 from domain_oss.providers.base import RecordValue, canonical_content
 from domain_oss.providers.cloudflare import CloudflareProvider
-from domain_oss.dns_tools import parse_nameserver
 from domain_oss.services import validate_record
 
 

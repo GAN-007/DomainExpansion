@@ -1,7 +1,6 @@
 from flask import request, session
 from flask_login import current_user
 
-
 SUPPORTED_LOCALES = ("en-US", "zh-CN", "zh-TW", "es-ES", "pt-BR", "fr-FR", "ru-RU", "ja-JP")
 LOCALE_LABELS = {
     "en-US": "English", "zh-CN": "简体中文", "zh-TW": "繁體中文", "es-ES": "Español",

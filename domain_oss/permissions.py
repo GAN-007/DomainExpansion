@@ -4,7 +4,6 @@ from flask_login import current_user
 from .extensions import db
 from .models import Domain, TeamMember
 
-
 WRITE_ROLES = {"owner", "operator", "member"}
 MANAGE_ROLES = {"owner", "operator"}
 

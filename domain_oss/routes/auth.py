@@ -6,7 +6,6 @@ from ..models import Setting, User, UserSession, now_utc
 from ..notifications import emit_event
 from ..security import USERNAME_RE, audit, rate_limited, require_password_strength, safe_next_url
 
-
 bp = Blueprint("auth", __name__)
 
 

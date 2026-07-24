@@ -1,8 +1,7 @@
 from flask import Blueprint, redirect, render_template, request, session, url_for
 
-from ..models import ManagedZone, Setting, User
 from ..i18n import SUPPORTED_LOCALES
-
+from ..models import ManagedZone, Setting, User
 
 bp = Blueprint("public", __name__)
 

@@ -1,8 +1,8 @@
-from .base import DNSProviderError, RecordValue as RecordValue
+from .base import DNSProviderError
+from .base import RecordValue as RecordValue
 from .bind import BindProvider
 from .cloudflare import CloudflareProvider
 from .powerdns import PowerDNSProvider
-
 
 PROVIDERS = {
     "bind": BindProvider,

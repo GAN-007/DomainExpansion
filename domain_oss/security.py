@@ -14,10 +14,9 @@ from flask_login import current_user
 from .extensions import db
 from .models import AuditLog
 
-
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{2,31}$")
 LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
-RECORD_NAME_RE = re.compile(r"^(?:@|\*|[a-z0-9_](?:[a-z0-9_.-]{0,251}[a-z0-9_])?)$", re.I)
+RECORD_NAME_RE = re.compile(r"^(?:@|\*|[a-z0-9_](?:[a-z0-9_.-]{0,251}[a-z0-9_])?)$", re.IGNORECASE)
 ALLOWED_RECORD_TYPES = {"A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA", "NS"}
 _attempts = defaultdict(deque)
 

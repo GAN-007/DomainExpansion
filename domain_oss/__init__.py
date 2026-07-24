@@ -5,9 +5,9 @@ from flask_login import current_user, logout_user
 
 from .config import load_config
 from .extensions import db, login_manager
+from .i18n import LOCALE_LABELS, SUPPORTED_LOCALES, get_locale, translate
 from .models import Setting, User, UserSession, now_utc
 from .security import csrf_token, validate_csrf
-from .i18n import LOCALE_LABELS, SUPPORTED_LOCALES, get_locale, translate
 
 
 def create_app(test_config=None):

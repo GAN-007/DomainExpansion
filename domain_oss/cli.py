@@ -5,9 +5,9 @@ from sqlalchemy import inspect, text
 
 from . import create_app
 from .extensions import db
-from .models import User
-from .migrations import upgrade_database
 from .jobs import process_pending_jobs
+from .migrations import upgrade_database
+from .models import User
 from .security import USERNAME_RE, require_password_strength
 
 

@@ -4,14 +4,13 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template, r
 from flask_login import current_user, login_required
 
 from ..extensions import db
+from ..jobs import enqueue_rrset, process_job
 from ..models import DNSRecord, Domain, ManagedZone, Setting, Team, TeamMember
 from ..notifications import emit_event
 from ..permissions import can_access_domain, require_domain, visible_domains_query
 from ..providers import DNSProviderError
 from ..security import LABEL_RE, audit
 from ..services import sync_rrset, validate_record
-from ..jobs import enqueue_rrset, process_job
-
 
 bp = Blueprint("domains", __name__, url_prefix="/domains")
 
