@@ -71,10 +71,18 @@ jobs:
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
           cp -a "${SOURCE_DIR}/." .
 
-          mkdir -p docs/imported-freedomain
+          mkdir -p docs/imported-freedomain docs/source-workflows
           if [ -f "${PRESERVE_ROOT}/FreeDomain-README.md" ]; then
             cp "${PRESERVE_ROOT}/FreeDomain-README.md" docs/imported-freedomain/README.md
           fi
+          if [ -f .github/workflows/ci.yml ]; then
+            cp .github/workflows/ci.yml docs/source-workflows/ci.yml
+          fi
+
+          # A workflow token cannot create another workflow definition. Preserve
+          # the source CI verbatim above and restore it through the authenticated
+          # GitHub connector after this import commit lands.
+          rm -rf .github/workflows
 
           cat > SOURCE_IMPORT.md <<'EOF'
           # Source Import Record
@@ -86,6 +94,11 @@ jobs:
           The imported application remains licensed under GNU AGPL-3.0-only.
           Original attribution, copyright notices, source links, documentation,
           tests, integrations, and operational tooling are preserved.
+
+          The source CI workflow is preserved verbatim at
+          `docs/source-workflows/ci.yml` and is restored to
+          `.github/workflows/ci.yml` immediately after this import by the
+          authenticated GitHub connector.
 
           The earlier `DigitalPlatDev/FreeDomain` documentation-only repository
           material that existed on the destination default branch before this
@@ -100,6 +113,7 @@ jobs:
           test -f domain_oss/__init__.py
           test -d tests
           test -d integrations/terraform-provider-domainoss
+          test -f docs/source-workflows/ci.yml
           test ! -e .github/workflows/import-domainoss.yml
 
       - name: Commit imported executable platform
