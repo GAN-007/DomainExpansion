@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - agent/import-freedomain
-    paths:
-      - .github/workflows/validate-import.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -38,12 +37,13 @@ jobs:
           import collections
           import pathlib
           import re
+          import subprocess
           import sys
           import urllib.parse
 
-          root = pathlib.Path.cwd()
-          expected_file_count = 85  # 84 upstream files plus this temporary validator.
-          tracked = [pathlib.Path(p) for p in __import__('subprocess').check_output(['git', 'ls-files'], text=True).splitlines()]
+          root = pathlib.Path.cwd().resolve()
+          expected_file_count = 85
+          tracked = [pathlib.Path(p) for p in subprocess.check_output(['git', 'ls-files'], text=True).splitlines()]
 
           if len(tracked) != expected_file_count:
               raise SystemExit(f'Unexpected tracked-file count: expected {expected_file_count}, found {len(tracked)}')
@@ -74,7 +74,6 @@ jobs:
 
           extensions = collections.Counter((p.suffix.lower() or '<none>') for p in tracked)
           markdown_files = [p for p in tracked if p.suffix.lower() == '.md']
-
           markdown_link = re.compile(r'!?\[[^\]]*\]\(([^)]+)\)')
           html_ref = re.compile(r'(?:src|href)=["\']([^"\']+)["\']', re.IGNORECASE)
           broken: list[tuple[str, str, str]] = []
@@ -85,7 +84,6 @@ jobs:
                   return None
               if raw.startswith('<') and raw.endswith('>'):
                   raw = raw[1:-1].strip()
-              # Markdown targets can include an optional quoted title after whitespace.
               if ' "' in raw:
                   raw = raw.split(' "', 1)[0]
               elif " '" in raw:
@@ -93,8 +91,7 @@ jobs:
               parsed = urllib.parse.urlsplit(raw)
               if parsed.scheme or raw.startswith('//') or raw.startswith('#'):
                   return None
-              path = urllib.parse.unquote(parsed.path)
-              return path or None
+              return urllib.parse.unquote(parsed.path) or None
 
           for md in markdown_files:
               text = (root / md).read_text(encoding='utf-8')
@@ -106,7 +103,7 @@ jobs:
                       continue
                   candidate = (root / md.parent / target).resolve()
                   try:
-                      candidate.relative_to(root.resolve())
+                      candidate.relative_to(root)
                   except ValueError:
                       broken.append((str(md), raw, 'escapes repository root'))
                       continue
@@ -128,7 +125,7 @@ jobs:
               data = (root / path).read_bytes()
               if not data.startswith(signatures[path.suffix.lower()]):
                   raise SystemExit(f'Invalid {path.suffix} signature: {path}')
-              if len(data) == 0:
+              if not data:
                   raise SystemExit(f'Empty binary asset: {path}')
 
           app_manifests = [
