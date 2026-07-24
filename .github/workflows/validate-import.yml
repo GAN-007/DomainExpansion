@@ -1,9 +1,9 @@
 name: Validate Imported FreeDomain Snapshot
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/import-freedomain
+      - main
   workflow_dispatch:
 
 permissions:
@@ -16,6 +16,7 @@ concurrency:
 jobs:
   validate:
     name: Validate all imported files
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'agent/import-freedomain'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
