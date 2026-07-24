@@ -1,0 +1,120 @@
+name: Production Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build complete source inventory
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          find . -path ./.git -prune -o -type f -print | sort > source-inventory.txt
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          files = []
+          for path in sorted(Path('.').rglob('*')):
+              if not path.is_file() or '.git' in path.parts:
+                  continue
+              data = path.read_bytes()
+              files.append({
+                  'path': path.as_posix(),
+                  'bytes': len(data),
+                  'sha256': hashlib.sha256(data).hexdigest(),
+              })
+          Path('source-manifest.json').write_text(json.dumps(files, indent=2) + '\n', encoding='utf-8')
+          PY
+          tar --exclude=.git -czf domainexpansion-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: complete-source-${{ github.run_id }}
+          path: |
+            source-inventory.txt
+            source-manifest.json
+            domainexpansion-source.tar.gz
+          retention-days: 7
+
+  python-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e '.[dev]'
+      - name: Ruff diagnostics
+        id: ruff
+        continue-on-error: true
+        run: ruff check . --output-format=json > ruff-report.json
+      - name: Python tests and coverage
+        id: pytest
+        continue-on-error: true
+        run: pytest --cov=domain_oss --cov-report=term-missing --cov-report=json:coverage.json --junitxml=pytest.xml | tee pytest-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-validation-${{ github.run_id }}
+          path: |
+            ruff-report.json
+            coverage.json
+            pytest.xml
+            pytest-output.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Enforce Python quality gates
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.ruff.outcome }}" = success
+          test "${{ steps.pytest.outcome }}" = success
+
+  terraform-provider:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/terraform-provider-domainoss
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: integrations/terraform-provider-domainoss/go.sum
+      - run: go test -race -coverprofile=coverage.out ./...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-provider-validation-${{ github.run_id }}
+          path: integrations/terraform-provider-domainoss/coverage.out
+          retention-days: 7
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: domainexpansion:validation
+      - name: Inspect image
+        run: docker image inspect domainexpansion:validation > docker-image-inspect.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-validation-${{ github.run_id }}
+          path: docker-image-inspect.json
+          retention-days: 7
